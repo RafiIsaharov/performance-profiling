@@ -26,8 +26,12 @@ public class LoanService {
   private final LoanApplicationRepo loanApplicationRepo;
   private final CommentsApiClient commentsApiClient;
 
+
+    //1) Avoid doing API calls (REST/SOAP/COBOL) while holding a DB transaction/Connection
+  //because connection are a scare  precious resource and should be released as soon as possible
   @SneakyThrows
-  @Transactional // The Transactional annotation is used to indicate that a method is a transactional method but if use only to get data from the database, it is not necessary to use it
+//  @Transactional // I don't really need  Tx here since I'm just SELECTing data
+  // The Transactional annotation is used to indicate that a method is a transactional method but if use only to get data from the database, it is not necessary to use it
   //because the method is read-only and the transaction is not necessary, and it aquires a connection to the database and it is not necessary
   // getConnection from the database pool
 //  the issue here is that the connections were held for a long time and the pool was exhausted
