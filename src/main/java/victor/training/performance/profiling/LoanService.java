@@ -1,5 +1,6 @@
 package victor.training.performance.profiling;
 
+import com.zaxxer.hikari.HikariDataSource;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +15,7 @@ import victor.training.performance.profiling.entity.LoanApplication.Status;
 import victor.training.performance.profiling.repo.AuditRepo;
 import victor.training.performance.profiling.repo.LoanApplicationRepo;
 
+import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -25,9 +27,11 @@ import java.util.concurrent.CompletableFuture;
 public class LoanService {
   private final LoanApplicationRepo loanApplicationRepo;
   private final CommentsApiClient commentsApiClient;
+  private final HikariDataSource dataSource;
 
 
-    //1) Avoid doing API calls (REST/SOAP/COBOL) while holding a DB transaction/Connection
+
+  //1) Avoid doing API calls (REST/SOAP/COBOL) while holding a DB transaction/Connection
   //because connection are a scare  precious resource and should be released as soon as possible
   @SneakyThrows
 //  @Transactional // I don't really need  Tx here since I'm just SELECTing data
@@ -39,10 +43,13 @@ public class LoanService {
 //  fix: release the connection faster back to the pool
   public LoanApplicationDto getLoanApplication(Long loanId) {
     log.info("Start");
+    Connection connection = dataSource.getConnection();
+    connection.setAutoCommit(false); // = start tx
     List<CommentDto> comments = commentsApiClient.fetchComments(loanId); // takes ±40ms in prod
     LoanApplication loanApplication = loanApplicationRepo.findByIdLoadingSteps(loanId);
     LoanApplicationDto dto = new LoanApplicationDto(loanApplication, comments);
     log.trace("Loan app: " + loanApplication);
+    connection.commit(); // = end tx
     return dto;
   }
 
@@ -56,6 +63,8 @@ public class LoanService {
   private final List<Long> recentLoanStatusQueried = new ArrayList<>();
 
   @Transactional
+  // we do here a select from the database and we don't need to use the transactional annotation
+  // Transactional and synchronized are not recommended to be used together because they can lead to deadlocks and performance issues
   public synchronized Status getLoanStatus(Long loanId) {
     LoanApplication loanApplication = loanApplicationRepo.findById(loanId).orElseThrow();
     recentLoanStatusQueried.remove(loanId); // BUG#7235 - avoid duplicates in list
