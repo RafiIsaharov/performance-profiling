@@ -21,12 +21,18 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@Transactional
+//@Transactional // or @TransactionalAttribute (JEE) Transaction on class level is not recommended because it can lead to deadlocks and performance issues
 public class LoanService {
   private final LoanApplicationRepo loanApplicationRepo;
   private final CommentsApiClient commentsApiClient;
 
   @SneakyThrows
+  @Transactional // The Transactional annotation is used to indicate that a method is a transactional method but if use only to get data from the database, it is not necessary to use it
+  //because the method is read-only and the transaction is not necessary, and it aquires a connection to the database and it is not necessary
+  // getConnection from the database pool
+//  the issue here is that the connections were held for a long time and the pool was exhausted
+//  issue=connection pool starvation issue; because of unfair usage. the code make Bad use of connection.
+//  fix: release the connection faster back to the pool
   public LoanApplicationDto getLoanApplication(Long loanId) {
     log.info("Start");
     List<CommentDto> comments = commentsApiClient.fetchComments(loanId); // takes ±40ms in prod
@@ -37,7 +43,7 @@ public class LoanService {
   }
 
   private final AuditRepo auditRepo;
-
+  @Transactional // needed here💖
   public void saveLoanApplication(String title) {
     Long id = loanApplicationRepo.save(new LoanApplication().setTitle(title)).getId();
     auditRepo.save(new Audit("Loan created: " + id));
@@ -45,6 +51,7 @@ public class LoanService {
 
   private final List<Long> recentLoanStatusQueried = new ArrayList<>();
 
+  @Transactional
   public synchronized Status getLoanStatus(Long loanId) {
     LoanApplication loanApplication = loanApplicationRepo.findById(loanId).orElseThrow();
     recentLoanStatusQueried.remove(loanId); // BUG#7235 - avoid duplicates in list
@@ -55,6 +62,7 @@ public class LoanService {
 
   private final ThreadPoolTaskExecutor executor;
 
+  @Transactional
   public List<Long> getRecentLoanStatusQueried() {
     log.info("In parent thread");
     CompletableFuture.runAsync(() -> log.info("In a child thread"), executor).join();
