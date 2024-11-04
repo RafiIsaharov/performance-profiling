@@ -30,6 +30,7 @@ You should see a page like this:
 ### Add the open-telemetry agent (optional: requires local Docker)
 - Start the monitoring-otel docker compose 
 - Download the OTEL agent from [https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases](here)
+- https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases
 - Add to your VM options: `-javaagent:/path/to/opentelemetry-javaagent.jar -Dotel.instrumentation.micrometer.enabled=true -Dotel.metric.export.interval=500 -Dotel.bsp.schedule.delay=500`
 
 ## Start the application
