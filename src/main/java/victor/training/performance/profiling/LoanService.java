@@ -43,13 +43,10 @@ public class LoanService {
 //  fix: release the connection faster back to the pool
   public LoanApplicationDto getLoanApplication(Long loanId) {
     log.info("Start");
-    Connection connection = dataSource.getConnection();
-    connection.setAutoCommit(false); // = start tx
     List<CommentDto> comments = commentsApiClient.fetchComments(loanId); // takes ±40ms in prod
     LoanApplication loanApplication = loanApplicationRepo.findByIdLoadingSteps(loanId);
     LoanApplicationDto dto = new LoanApplicationDto(loanApplication, comments);
     log.trace("Loan app: " + loanApplication);
-    connection.commit(); // = end tx
     return dto;
   }
 
@@ -61,11 +58,17 @@ public class LoanService {
   }
 
   private final List<Long> recentLoanStatusQueried = new ArrayList<>();
+  public synchronized void deadlock() {
+    // requires a conn:
+    var a = loanApplicationRepo.findById(1L).orElseThrow();
+  }
 
-  @Transactional
+  // 2) don't combine @Transactional (keeping connections open) with synchronized// wasteful(JDBC pool starvation) and risky (deadlocks)
+  //  // @Transactional // makes a magic proxy acquire 1 connection from JDBC pool and keep it until the method ends
   // we do here a select from the database and we don't need to use the transactional annotation
   // Transactional and synchronized are not recommended to be used together because they can lead to deadlocks and performance issues
   public synchronized Status getLoanStatus(Long loanId) {
+    //by synchronized a single thread to enter this method at a time
     LoanApplication loanApplication = loanApplicationRepo.findById(loanId).orElseThrow();
     recentLoanStatusQueried.remove(loanId); // BUG#7235 - avoid duplicates in list
     recentLoanStatusQueried.add(loanId);
